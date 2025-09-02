@@ -1,0 +1,352 @@
+generator client {
+  provider      = "prisma-client-js"
+  bbinaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  memberId  String   @unique
+  memberIdx String   @unique
+  name      String
+  nameEn    String?
+  email     String?
+  password  String?
+  role      UserRole
+  organization String?
+  department String?
+  phone     String?
+  mobile    String?
+  status    UserStatus @default(ACTIVE)
+  addressKr String?  @db.Text
+  addressEn String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("us_patents_users")
+}
+
+model Patent {
+  id                String      @id @default(cuid())
+  managementNumber  String      @unique
+  title             String
+  titleEn           String?
+  applicationNumber String?     @unique
+  usApplicationNumber String?
+  usRegistrationNumber String?
+  pctApplicationNumber String?
+  filingDate        DateTime?
+  pctFiled          Boolean     @default(false)
+  pctFilingDate     DateTime?
+  usptoEligible     Boolean     @default(false)
+  dueDate           DateTime?
+  status            PatentStatus @default(NO_PROGRESS)
+  priority          Priority    @default(MEDIUM)
+  notes             String?     @db.Text
+  inventors         String?     @db.Text
+  
+  // 관계 필드 (외래키 제거로 인해 단순 참조)
+  inventorId        Int
+  managerId         Int
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("us_patents_patents")
+}
+
+model PriorityPatent {
+  id                String      @id @default(cuid())
+  patentId          String      // 메인 특허 ID (외래키 없이 단순 참조)
+  title             String      // 우선권 특허 제목
+  applicationNumber String?     // 우선권 특허 출원번호
+  filingDate        DateTime?   // 우선권 특허 출원일
+  inventors         String?     @db.Text // 발명자 정보 (JSON)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("us_patents_priority_patents")
+}
+
+model Translation {
+  id          String            @id @default(cuid())
+  patentId    String
+  originalText String           @db.LongText
+  translatedText String?        @db.LongText
+  status      TranslationStatus @default(NOT_STARTED)
+  translatorId Int?
+  reviewerId   Int?
+  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("us_patents_translations")
+}
+
+model TranslationFile {
+  id                String      @id @default(cuid())
+  patentId          String      // 특허 ID
+  section           String      // "translation" 또는 "review"
+  comment           String?     @db.Text
+  files             String      @db.Text // JSON 형태로 파일 정보 저장
+  isCompletion      Boolean     @default(false) // 번역 완료 여부
+  translatedTitleUS String?     // 번역완료 특허명(US)
+  uploadedAt        DateTime    @default(now())
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("us_patents_translation_files")
+}
+
+model Review {
+  id            String      @id @default(cuid())
+  patentId      String
+  translationId String?
+  reviewerId    Int
+  content       String      @db.Text
+  status        ReviewStatus @default(PENDING)
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("us_patents_reviews")
+}
+
+model Document {
+  id          String       @id @default(cuid())
+  patentId    String
+  type        DocumentType
+  fileName    String
+  filePath    String
+  fileSize    Int?
+  version     Int          @default(1)
+  status      DocumentStatus @default(DRAFT)
+  uploadedBy  Int?
+  
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("us_patents_documents")
+}
+
+model OAResponse {
+  id          String    @id @default(cuid())
+  patentId    String
+  oaNumber    String
+  receivedDate DateTime
+  responseDate DateTime?
+  content     String    @db.LongText
+  status      OAStatus  @default(RECEIVED)
+  handlerId   Int?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("us_patents_oa_responses")
+}
+
+model Cost {
+  id          String     @id @default(cuid())
+  patentId    String
+  type        CostType
+  amount      Decimal    @db.Decimal(10,2)
+  currency    String     @default("USD")
+  description String?
+  status      PaymentStatus @default(PENDING)
+  paidBy      Int?
+  paidDate    DateTime?
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("us_patents_costs")
+}
+
+model DocumentPreparationFile {
+  id                String      @id @default(cuid())
+  patentId          String
+  documentType      RequiredDocumentType
+  uploadType        UploadType
+  fileName          String
+  originalFileName  String
+  filePath          String
+  fileKey           String?     // S3 파일 키
+  fileSize          Int
+  fileType          String
+  uploadedBy        String
+  status            DocumentItemStatus @default(NOT_UPLOADED)
+  linkedTranslationId String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("us_patents_document_preparation_files")
+}
+
+model DocumentPreparation {
+  id                  String      @id @default(cuid())
+  patentId            String      @unique
+  overallStatus       OverallStatus @default(NOT_STARTED)
+  translationStatus   TranslationStatus @default(NOT_STARTED)
+  linkedTranslationIds String?    @db.Text // JSON 배열
+  readyForFiling      Boolean     @default(false)
+  filingTriggered     Boolean     @default(false)
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@map("us_patents_document_preparations")
+}
+
+model DocumentComment {
+  id            String      @id @default(cuid())
+  patentId      String
+  documentType  RequiredDocumentType
+  content       String      @db.Text
+  authorId      Int
+  authorName    String
+  authorRole    UserRole
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("us_patents_document_comments")
+}
+
+model FilingFile {
+  id                String      @id @default(cuid())
+  patentId          String      @map("patent_id")
+  fileName          String      @map("file_name")
+  originalFileName  String      @map("original_file_name")
+  fileSize          BigInt      @map("file_size")
+  fileType          String      @map("file_type")
+  uploadedBy        String      @map("uploaded_by")
+  fileKey           String      @map("file_key")
+  uploadedAt        DateTime    @map("uploaded_at") @default(now())
+  
+  createdAt         DateTime    @map("created_at") @default(now())
+  updatedAt         DateTime    @map("updated_at") @updatedAt
+
+  @@map("us_patents_filing_files")
+}
+
+enum UserRole {
+  PATENT_MANAGER
+  INVENTOR
+  US_ATTORNEY
+  EXTERNAL_REVIEWER
+}
+
+enum PatentStatus {
+  NO_PROGRESS
+  TRANSLATING
+  TRANSLATION_REVIEW
+  DOCUMENT_PREP
+  ATTORNEY_REVIEW
+  USPTO_FILING
+  OA_RESPONSE
+  USPTO_REGISTERED
+}
+
+enum TranslationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  ADS
+  SPECIFICATION
+  CLAIMS
+  ABSTRACT
+  DRAWINGS
+  OATH_DECLARATION
+  IDS
+  ASSIGNMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  SUBMITTED
+}
+
+enum OAStatus {
+  RECEIVED
+  IN_PROGRESS
+  RESPONDED
+  FINAL
+}
+
+enum CostType {
+  TRANSLATION
+  ATTORNEY_FEE
+  USPTO_FEE
+  OA_RESPONSE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  REQUESTED
+  APPROVED
+  PAID
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RequiredDocumentType {
+  DECLARATION
+  ADS
+  IDS
+  ASSIGNMENT
+  SPECIFICATION
+  DRAWINGS
+  IDS_ATTACHMENTS
+  OTHER
+}
+
+enum UploadType {
+  ATTORNEY_DRAFT
+  USER_FINAL
+}
+
+enum DocumentItemStatus {
+  NOT_UPLOADED
+  ATTORNEY_UPLOADED
+  USER_UPLOADED
+  COMPLETED
+  TRANSLATION_WAITING
+  TRANSLATION_LINKED
+}
+
+enum OverallStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
